@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { LetterState } from '../types';
 import { BackspaceIcon } from './Icons';
@@ -42,7 +43,7 @@ export const Keyboard: React.FC<KeyboardProps> = ({ keyStates, onChar, onDelete,
   
   // Helper to avoid re-importing in this component
   const normalizeWord = (word: string): string => {
-    return word.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return word.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
   }
 
   return (
