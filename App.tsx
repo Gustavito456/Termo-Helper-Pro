@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Attempt, LetterState } from './types';
 import { loadState, saveState } from './services/storage';
@@ -28,6 +27,13 @@ const App: React.FC = () => {
     setIsSolved(false);
     setError('');
   }, []);
+
+  useEffect(() => {
+    const isGameSolved = attempts.some(
+      a => a.isLocked && a.feedback.every(f => f === LetterState.Correct)
+    );
+    setIsSolved(isGameSolved);
+  }, [attempts]);
   
   useEffect(() => {
     const savedState = loadState();
@@ -39,7 +45,6 @@ const App: React.FC = () => {
       }));
       setAttempts(migratedAttempts);
       setTheme(savedState.theme || 'light');
-      checkIfSolved(migratedAttempts);
     } else {
       resetGame();
     }
@@ -64,15 +69,6 @@ const App: React.FC = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
   
-  const checkIfSolved = (currentAttempts: Attempt[]) => {
-    const lastAttempt = [...currentAttempts].reverse().find(a => a.isLocked && a.isFeedbackApplied);
-    if (lastAttempt?.feedback.every(f => f === LetterState.Correct)) {
-        setIsSolved(true);
-        return true;
-    }
-    return false;
-  };
-  
   const handleFeedbackChange = (attemptIndex: number, letterIndex: number, newFeedback: LetterState) => {
       const newAttempts = [...attempts];
       newAttempts[attemptIndex].feedback[letterIndex] = newFeedback;
@@ -83,20 +79,21 @@ const App: React.FC = () => {
       const newAttempts = attempts.map((attempt, i) =>
         i === index ? { ...attempt, isFeedbackApplied: true } : attempt
       );
-      
-      if (checkIfSolved(newAttempts)) {
-        setAttempts(newAttempts);
-        return;
-      }
 
-      const newAttempt: Attempt = {
-        word: '',
-        feedback: Array(WORD_LENGTH).fill(LetterState.Empty),
-        isLocked: false,
-        isFeedbackApplied: false,
-      };
-      
-      setAttempts([...newAttempts, newAttempt]);
+      const wasJustSolved = newAttempts[index].feedback.every(f => f === LetterState.Correct);
+
+      if (wasJustSolved) {
+        setAttempts(newAttempts); // This triggers useEffect to set isSolved and stops the game.
+      } else {
+        // Add a new empty attempt row to continue the game.
+        const newAttempt: Attempt = {
+          word: '',
+          feedback: Array(WORD_LENGTH).fill(LetterState.Empty),
+          isLocked: false,
+          isFeedbackApplied: false,
+        };
+        setAttempts([...newAttempts, newAttempt]);
+      }
   };
 
   const handleChar = useCallback((char: string) => {
@@ -169,9 +166,6 @@ const App: React.FC = () => {
             if (currentState !== LetterState.Correct) {
                  if (feedback === LetterState.Correct) {
                     states[letter] = LetterState.Correct;
-                // Fix: Removed redundant check `&& currentState !== LetterState.Correct`.
-                // The outer `if` block already ensures this condition is met, and the check
-                // was causing a TypeScript type comparison error.
                 } else if (feedback === LetterState.Present) {
                     states[letter] = LetterState.Present;
                 } else if (feedback === LetterState.Absent && !currentState) {
