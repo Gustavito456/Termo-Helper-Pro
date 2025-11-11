@@ -70,30 +70,36 @@ const App: React.FC = () => {
   };
   
   const handleFeedbackChange = (attemptIndex: number, letterIndex: number, newFeedback: LetterState) => {
-      const newAttempts = [...attempts];
-      newAttempts[attemptIndex].feedback[letterIndex] = newFeedback;
-      setAttempts(newAttempts);
+      setAttempts(prevAttempts => 
+        prevAttempts.map((attempt, i) => {
+            if (i !== attemptIndex) return attempt;
+            const newFeedbackArray = [...attempt.feedback];
+            newFeedbackArray[letterIndex] = newFeedback;
+            return { ...attempt, feedback: newFeedbackArray };
+        })
+      );
   };
 
   const handleFeedbackApplied = (index: number) => {
-      const newAttempts = attempts.map((attempt, i) =>
-        i === index ? { ...attempt, isFeedbackApplied: true } : attempt
-      );
+      setAttempts(prevAttempts => {
+          const newAttempts = prevAttempts.map((attempt, i) =>
+            i === index ? { ...attempt, isFeedbackApplied: true } : attempt
+          );
 
-      const wasJustSolved = newAttempts[index].feedback.every(f => f === LetterState.Correct);
+          const wasJustSolved = newAttempts[index].feedback.every(f => f === LetterState.Correct);
 
-      if (wasJustSolved) {
-        setAttempts(newAttempts); // This triggers useEffect to set isSolved and stops the game.
-      } else {
-        // Add a new empty attempt row to continue the game.
-        const newAttempt: Attempt = {
-          word: '',
-          feedback: Array(WORD_LENGTH).fill(LetterState.Empty),
-          isLocked: false,
-          isFeedbackApplied: false,
-        };
-        setAttempts([...newAttempts, newAttempt]);
-      }
+          if (wasJustSolved) {
+            return newAttempts;
+          } else {
+            const newAttempt: Attempt = {
+              word: '',
+              feedback: Array(WORD_LENGTH).fill(LetterState.Empty),
+              isLocked: false,
+              isFeedbackApplied: false,
+            };
+            return [...newAttempts, newAttempt];
+          }
+      });
   };
 
   const handleChar = useCallback((char: string) => {
@@ -119,16 +125,21 @@ const App: React.FC = () => {
     }
     
     setError('');
-    const newAttempts = [...attempts];
-    newAttempts[attempts.length - 1] = {
-        ...lastAttempt,
-        word: currentGuess.toUpperCase(),
-        isLocked: true,
-        feedback: Array(WORD_LENGTH).fill(LetterState.Absent),
-        isFeedbackApplied: false,
-    };
-    setAttempts(newAttempts);
+    const submittedWord = currentGuess.toUpperCase();
     setCurrentGuess('');
+
+    setAttempts(prevAttempts => {
+        const newAttempts = [...prevAttempts];
+        const lastAttemptIndex = newAttempts.length - 1;
+        newAttempts[lastAttemptIndex] = {
+            ...newAttempts[lastAttemptIndex],
+            word: submittedWord,
+            isLocked: true,
+            feedback: Array(WORD_LENGTH).fill(LetterState.Absent),
+            isFeedbackApplied: false,
+        };
+        return newAttempts;
+    });
   }, [attempts, isSolved, currentGuess]);
 
   useEffect(() => {
