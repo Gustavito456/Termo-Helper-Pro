@@ -3,13 +3,15 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Attempt, LetterState } from './types';
 import { loadState, saveState } from './services/storage';
 import { calculateBestGuess } from './services/solver';
-import { isValidWord, WORD_LENGTH } from './services/dictionary';
+import { isValidWord, WORD_LENGTH, normalizeWord } from './services/dictionary';
 import Header from './components/Header';
 import AttemptRow from './components/AttemptRow';
 import CandidatesPanel from './components/CandidatesPanel';
+import { Keyboard } from './components/Keyboard';
 
 const App: React.FC = () => {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [currentGuess, setCurrentGuess] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isSolved, setIsSolved] = useState<boolean>(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
@@ -22,6 +24,7 @@ const App: React.FC = () => {
       isFeedbackApplied: false,
     };
     setAttempts([newAttempt]);
+    setCurrentGuess('');
     setIsSolved(false);
     setError('');
   }, []);
@@ -62,28 +65,12 @@ const App: React.FC = () => {
   };
   
   const checkIfSolved = (currentAttempts: Attempt[]) => {
-    // FIX: Replace findLast with a compatible alternative for older JS targets.
-    const lastAttempt = [...currentAttempts].reverse().find(a => a.isLocked);
-    if (lastAttempt?.isLocked && lastAttempt.feedback.every(f => f === LetterState.Correct)) {
+    const lastAttempt = [...currentAttempts].reverse().find(a => a.isLocked && a.isFeedbackApplied);
+    if (lastAttempt?.feedback.every(f => f === LetterState.Correct)) {
         setIsSolved(true);
         return true;
     }
     return false;
-  };
-
-  const handleWordConfirm = (index: number, word: string) => {
-    if (!isValidWord(word)) {
-      setError(`Palavra "${word}" não encontrada no dicionário.`);
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-    setError('');
-    const newAttempts = [...attempts];
-    newAttempts[index].word = word;
-    newAttempts[index].isLocked = true;
-    newAttempts[index].feedback = Array(WORD_LENGTH).fill(LetterState.Absent);
-    newAttempts[index].isFeedbackApplied = false;
-    setAttempts(newAttempts);
   };
   
   const handleFeedbackChange = (attemptIndex: number, letterIndex: number, newFeedback: LetterState) => {
@@ -93,7 +80,14 @@ const App: React.FC = () => {
   };
 
   const handleFeedbackApplied = (index: number) => {
-      if (checkIfSolved(attempts)) return;
+      const newAttempts = attempts.map((attempt, i) =>
+        i === index ? { ...attempt, isFeedbackApplied: true } : attempt
+      );
+      
+      if (checkIfSolved(newAttempts)) {
+        setAttempts(newAttempts);
+        return;
+      }
 
       const newAttempt: Attempt = {
         word: '',
@@ -102,18 +96,96 @@ const App: React.FC = () => {
         isFeedbackApplied: false,
       };
       
-      setAttempts(prev => [
-        ...prev.map((attempt, i) =>
-          i === index ? { ...attempt, isFeedbackApplied: true } : attempt
-        ),
-        newAttempt
-      ]);
+      setAttempts([...newAttempts, newAttempt]);
   };
+
+  const handleChar = useCallback((char: string) => {
+    if (currentGuess.length < WORD_LENGTH && !isSolved) {
+      setCurrentGuess(prev => prev + char);
+    }
+  }, [currentGuess.length, isSolved]);
+
+  const handleDelete = useCallback(() => {
+    setCurrentGuess(prev => prev.slice(0, -1));
+  }, []);
+
+  const handleEnter = useCallback(() => {
+    const lastAttempt = attempts[attempts.length - 1];
+    if (isSolved || !lastAttempt || lastAttempt.isLocked || currentGuess.length !== WORD_LENGTH) {
+      return;
+    }
+
+    if (!isValidWord(currentGuess)) {
+      setError(`Palavra "${currentGuess}" não encontrada no dicionário.`);
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+    
+    setError('');
+    const newAttempts = [...attempts];
+    newAttempts[attempts.length - 1] = {
+        ...lastAttempt,
+        word: currentGuess.toUpperCase(),
+        isLocked: true,
+        feedback: Array(WORD_LENGTH).fill(LetterState.Absent),
+        isFeedbackApplied: false,
+    };
+    setAttempts(newAttempts);
+    setCurrentGuess('');
+  }, [attempts, isSolved, currentGuess]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+        
+        const key = event.key.toUpperCase();
+        
+        if (key === 'ENTER') {
+            handleEnter();
+        } else if (key === 'BACKSPACE') {
+            handleDelete();
+        } else if ("QWERTYUIOPASDFGHJKLZXCVBNMÇ".includes(key)) {
+            handleChar(key);
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleEnter, handleDelete, handleChar]);
   
+  const keyStates = useMemo(() => {
+    const states: { [key: string]: LetterState } = {};
+    
+    for (const attempt of attempts) {
+        if (!attempt.isLocked) continue;
+        const normalizedWord = normalizeWord(attempt.word);
+        for (let i = 0; i < normalizedWord.length; i++) {
+            const letter = normalizedWord[i];
+            const feedback = attempt.feedback[i];
+            const currentState = states[letter];
+            
+            if (currentState !== LetterState.Correct) {
+                 if (feedback === LetterState.Correct) {
+                    states[letter] = LetterState.Correct;
+                // Fix: Removed redundant check `&& currentState !== LetterState.Correct`.
+                // The outer `if` block already ensures this condition is met, and the check
+                // was causing a TypeScript type comparison error.
+                } else if (feedback === LetterState.Present) {
+                    states[letter] = LetterState.Present;
+                } else if (feedback === LetterState.Absent && !currentState) {
+                    states[letter] = LetterState.Absent;
+                }
+            }
+        }
+    }
+    return states;
+}, [attempts]);
 
   return (
-    <div className="min-h-screen text-gray-800 dark:text-gray-200 font-sans p-2 sm:p-4">
-      <div className="max-w-md mx-auto">
+    <div className="min-h-screen text-gray-800 dark:text-gray-200 font-sans p-2 sm:p-4 flex flex-col">
+      <div className="max-w-md mx-auto w-full">
         <Header 
           suggestion={solverResult.bestGuess}
           onReset={resetGame}
@@ -141,7 +213,7 @@ const App: React.FC = () => {
               attemptIndex={index}
               isLastAttempt={index === attempts.length - 1}
               isSolved={isSolved}
-              onConfirm={handleWordConfirm}
+              currentGuess={index === attempts.length - 1 ? currentGuess : ''}
               onFeedbackChange={handleFeedbackChange}
               onFeedbackApplied={handleFeedbackApplied}
             />
@@ -149,6 +221,14 @@ const App: React.FC = () => {
         </div>
         
         <CandidatesPanel candidates={solverResult.candidates} />
+      </div>
+      <div className="max-w-2xl w-full mx-auto mt-auto pb-2">
+         <Keyboard 
+            keyStates={keyStates}
+            onChar={handleChar}
+            onDelete={handleDelete}
+            onEnter={handleEnter}
+        />
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { Attempt, LetterState } from '../types';
 import { WORD_LENGTH } from '../services/dictionary';
 import FeedbackCell from './FeedbackCell';
@@ -8,7 +8,7 @@ interface AttemptRowProps {
   attemptIndex: number;
   isLastAttempt: boolean;
   isSolved: boolean;
-  onConfirm: (index: number, word: string) => void;
+  currentGuess: string;
   onFeedbackChange: (attemptIndex: number, letterIndex: number, newFeedback: LetterState) => void;
   onFeedbackApplied: (index: number) => void;
 }
@@ -18,61 +18,31 @@ const AttemptRow: React.FC<AttemptRowProps> = ({
   attemptIndex,
   isLastAttempt,
   isSolved,
-  onConfirm,
+  currentGuess,
   onFeedbackChange,
   onFeedbackApplied,
 }) => {
-  const [inputValue, setInputValue] = useState(attempt.word);
-  const inputRef = useRef<HTMLInputElement>(null);
-  
   const isActive = isLastAttempt && !isSolved;
-  const isPendingFeedback = isActive && attempt.isLocked && !attempt.isFeedbackApplied;
+  const isPendingFeedback = attempt.isLocked && !attempt.isFeedbackApplied;
 
-  useEffect(() => {
-    if (isActive && !attempt.isLocked) {
-      inputRef.current?.focus();
-    }
-  }, [isActive, attempt.isLocked]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.toUpperCase().replace(/[^A-ZÇ]/g, '');
-    setInputValue(value);
+  const renderActiveWord = () => {
+    const letters = currentGuess.padEnd(WORD_LENGTH, ' ').split('');
+    return (
+        <div className="grid grid-cols-5 gap-1.5">
+            {letters.map((letter, index) => (
+                <div 
+                    key={index}
+                    className={`
+                        w-full aspect-square flex items-center justify-center text-2xl sm:text-3xl font-bold uppercase rounded-md border-2 transition-colors
+                        ${letter !== ' ' ? 'border-gray-500 dark:border-gray-400 animate-pop' : 'border-gray-300 dark:border-gray-600'}
+                    `}
+                >
+                    {letter}
+                </div>
+            ))}
+        </div>
+    );
   };
-
-  const handleConfirmClick = () => {
-    if (inputValue.length === WORD_LENGTH) {
-      onConfirm(attemptIndex, inputValue);
-    }
-  };
-  
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleConfirmClick();
-    }
-  };
-
-  const renderInput = () => (
-    <div className="flex items-center gap-2">
-      <input
-        ref={inputRef}
-        type="text"
-        value={inputValue}
-        onChange={handleInputChange}
-        onKeyDown={handleKeyDown}
-        maxLength={WORD_LENGTH}
-        className="flex-grow bg-gray-200 dark:bg-gray-700 p-2 rounded-md text-center font-bold tracking-[0.5em] uppercase focus:outline-none focus:ring-2 focus:ring-sky-500"
-        placeholder="DIGITE"
-        disabled={!isActive || attempt.isLocked}
-      />
-      <button
-        onClick={handleConfirmClick}
-        disabled={inputValue.length !== WORD_LENGTH || !isActive}
-        className="bg-sky-600 text-white font-bold py-2 px-4 rounded-md disabled:bg-gray-400 disabled:dark:bg-gray-600 disabled:cursor-not-allowed hover:bg-sky-700 transition-colors"
-      >
-        OK
-      </button>
-    </div>
-  );
   
   const renderLockedWord = () => (
      <div className="grid grid-cols-5 gap-1.5">
@@ -95,11 +65,11 @@ const AttemptRow: React.FC<AttemptRowProps> = ({
   );
 
   return (
-    <div className={`p-3 rounded-lg ${isActive && !attempt.isLocked ? 'bg-white dark:bg-gray-800 shadow-lg' : 'bg-transparent dark:bg-transparent'}`}>
+    <div className={`p-1.5 rounded-lg`}>
       <div className="flex items-center gap-4">
         <span className="text-xl font-mono text-gray-400 dark:text-gray-500">{attemptIndex + 1}</span>
         <div className="flex-grow">
-          {!attempt.isLocked && isActive ? renderInput() : renderLockedWord()}
+          {!attempt.isLocked && isActive ? renderActiveWord() : renderLockedWord()}
         </div>
       </div>
       {isPendingFeedback && (
@@ -108,7 +78,7 @@ const AttemptRow: React.FC<AttemptRowProps> = ({
                 onClick={() => onFeedbackApplied(attemptIndex)}
                 className="w-full bg-emerald-600 text-white font-bold py-2 px-4 rounded-md hover:bg-emerald-700 transition-colors"
             >
-                Aplicar Feedback e Próxima Tentativa
+                Confirmar Feedback e Sugerir Próxima
             </button>
         </div>
       )}

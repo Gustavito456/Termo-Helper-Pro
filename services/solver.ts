@@ -119,24 +119,51 @@ export const calculateBestGuess = (attempts: Attempt[]): SolverResult => {
   if (candidates.length === 0) {
     return { bestGuess: 'Nenhuma palavra encontrada', candidates: [] };
   }
-
-  // Scoring: find the word that reduces the most possibilities (simple scoring for now)
-  // A good heuristic is to pick a word with many unique, common letters.
-  const scoreWord = (word: string) => {
-    const normalized = normalizeWord(word);
-    const uniqueLetters = new Set(normalized.split(''));
-    let score = uniqueLetters.size * 10; // Prioritize more unique letters
-    // Bonus for not being one of the previous attempts
-    if (!attempts.some(a => normalizeWord(a.word) === normalized)) {
-      score += 5;
-    }
-    return score;
+  
+  if (candidates.length <= 2) {
+    return { bestGuess: candidates[0], candidates };
   }
 
-  const sortedCandidates = [...candidates].sort((a, b) => scoreWord(b) - scoreWord(a));
+  // Scoring: find the word that is most likely to eliminate other candidates.
+  // We'll calculate letter frequencies in the remaining candidates.
+  const letterFrequencies: { [key: string]: number } = {};
+  for (const word of candidates) {
+    const normalized = normalizeWord(word);
+    const uniqueLetters = new Set(normalized.split(''));
+    for (const letter of uniqueLetters) {
+        letterFrequencies[letter] = (letterFrequencies[letter] || 0) + 1;
+    }
+  }
+
+  const scoreWord = (word: string): number => {
+    const normalized = normalizeWord(word);
+    const uniqueLetters = new Set(normalized.split(''));
+    let score = 0;
+    for (const letter of uniqueLetters) {
+        score += letterFrequencies[letter] || 0;
+    }
+    return score;
+  };
+  
+  // We check the entire dictionary for the best guess, not just candidates.
+  // This helps eliminate more possibilities.
+  let bestGuess = candidates[0];
+  let maxScore = -1;
+
+  for (const word of DICTIONARY) {
+    // Don't suggest words that have already been tried
+    if (attempts.some(a => normalizeWord(a.word) === normalizeWord(word))) {
+        continue;
+    }
+    const score = scoreWord(word);
+    if (score > maxScore) {
+        maxScore = score;
+        bestGuess = word;
+    }
+  }
   
   return {
-    bestGuess: sortedCandidates[0] || 'Fim?',
+    bestGuess: bestGuess,
     candidates: candidates,
   };
 };
