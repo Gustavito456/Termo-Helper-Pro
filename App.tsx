@@ -135,7 +135,7 @@ const App: React.FC = () => {
             ...newAttempts[lastAttemptIndex],
             word: submittedWord,
             isLocked: true,
-            feedback: Array(WORD_LENGTH).fill(LetterState.Absent),
+            feedback: Array(WORD_LENGTH).fill(LetterState.Empty),
             isFeedbackApplied: false,
         };
         return newAttempts;

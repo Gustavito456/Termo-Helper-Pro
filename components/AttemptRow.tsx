@@ -24,6 +24,7 @@ const AttemptRow: React.FC<AttemptRowProps> = ({
 }) => {
   const isActive = isLastAttempt && !isSolved;
   const isPendingFeedback = attempt.isLocked && !attempt.isFeedbackApplied;
+  const isFeedbackIncomplete = isPendingFeedback && attempt.feedback.includes(LetterState.Empty);
 
   const renderActiveWord = () => {
     const letters = currentGuess.padEnd(WORD_LENGTH, ' ').split('');
@@ -54,9 +55,19 @@ const AttemptRow: React.FC<AttemptRowProps> = ({
                 isInteractive={isPendingFeedback}
                 onClick={() => {
                     if (!isPendingFeedback) return;
-                    const states = [LetterState.Absent, LetterState.Present, LetterState.Correct];
-                    const currentStateIndex = states.indexOf(attempt.feedback[index]);
-                    const nextState = states[(currentStateIndex + 1) % states.length];
+                    
+                    const currentFeedback = attempt.feedback[index];
+                    let nextState: LetterState;
+
+                    if (currentFeedback === LetterState.Empty) {
+                        nextState = LetterState.Absent;
+                    } else if (currentFeedback === LetterState.Absent) {
+                        nextState = LetterState.Present;
+                    } else if (currentFeedback === LetterState.Present) {
+                        nextState = LetterState.Correct;
+                    } else { // Correct
+                        nextState = LetterState.Absent;
+                    }
                     onFeedbackChange(attemptIndex, index, nextState);
                 }}
             />
@@ -76,7 +87,8 @@ const AttemptRow: React.FC<AttemptRowProps> = ({
         <div className="mt-3 text-center">
             <button
                 onClick={() => onFeedbackApplied(attemptIndex)}
-                className="w-full bg-emerald-600 text-white font-bold py-2 px-4 rounded-md hover:bg-emerald-700 transition-colors"
+                disabled={isFeedbackIncomplete}
+                className="w-full bg-emerald-600 text-white font-bold py-2 px-4 rounded-md hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 Confirmar Feedback e Sugerir Próxima
             </button>
