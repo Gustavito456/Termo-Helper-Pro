@@ -1,0 +1,5 @@
+{
+  "name": "Termo Helper Pro",
+  "description": "An intelligent assistant for the word game Termo (Brazilian Portuguese Wordle). It suggests the best next guess based on your previous attempts and feedback, handling accents and repeated letters to help you solve the puzzle faster.",
+  "requestFramePermissions": []
+}
