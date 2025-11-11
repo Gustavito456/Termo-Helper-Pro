@@ -124,34 +124,50 @@ export const calculateBestGuess = (attempts: Attempt[]): SolverResult => {
     return { bestGuess: candidates[0], candidates };
   }
 
-  // Scoring: find the word that is most likely to eliminate other candidates.
-  // We'll calculate letter frequencies in the remaining candidates.
-  const letterFrequencies: { [key: string]: number } = {};
-  for (const word of candidates) {
-    const normalized = normalizeWord(word);
-    const uniqueLetters = new Set(normalized.split(''));
-    for (const letter of uniqueLetters) {
-        letterFrequencies[letter] = (letterFrequencies[letter] || 0) + 1;
+  // Scoring: find the word that is most likely to eliminate other candidates,
+  // using positional frequency and a bonus for distinct letters in early guesses.
+  
+  // 1. Calculate positional letter frequencies from the remaining candidates.
+  const positionalFrequencies: Array<{ [key: string]: number }> = Array(WORD_LENGTH).fill(null).map(() => ({}));
+  for (const candidate of candidates) {
+    const normalized = normalizeWord(candidate);
+    for (let i = 0; i < normalized.length; i++) {
+      const letter = normalized[i];
+      positionalFrequencies[i][letter] = (positionalFrequencies[i][letter] || 0) + 1;
     }
   }
 
   const scoreWord = (word: string): number => {
     const normalized = normalizeWord(word);
-    const uniqueLetters = new Set(normalized.split(''));
     let score = 0;
-    for (const letter of uniqueLetters) {
-        score += letterFrequencies[letter] || 0;
+
+    // Part 1: Score based on positional frequency.
+    // score(word) = sum(freqPos[i][word[i]])
+    for (let i = 0; i < normalized.length; i++) {
+        const letter = normalized[i];
+        score += positionalFrequencies[i][letter] || 0;
     }
+
+    // Part 2: Add a bonus for having distinct letters in the first 3 attempts
+    // to cover the alphabet faster and gain more information.
+    if (attempts.length < 3) {
+      const uniqueLetters = new Set(normalized.split(''));
+      // The bonus needs to be significant enough to outweigh the positional score
+      // of words with common, but repeated, letters. A factor of the candidate count works well.
+      const distinctBonusFactor = candidates.length / 2;
+      score += uniqueLetters.size * distinctBonusFactor;
+    }
+    
     return score;
   };
   
   // We check the entire dictionary for the best guess, not just candidates.
-  // This helps eliminate more possibilities.
+  // This helps eliminate more possibilities by suggesting good "eliminator" words.
   let bestGuess = candidates[0];
   let maxScore = -1;
 
   for (const word of DICTIONARY) {
-    // Don't suggest words that have already been tried
+    // Don't suggest words that have already been tried.
     if (attempts.some(a => normalizeWord(a.word) === normalizeWord(word))) {
         continue;
     }
